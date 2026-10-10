@@ -5,6 +5,7 @@ Canonical instructions for any AI model working in this repository. CLAUDE.md po
 ## About me
 - Landon Momohara, senior at the Shidler College of Business, University of Hawaiʻi at Mānoa (BBA Marketing & International Business, minor in Japanese).
 - Working toward a career in digital marketing, possibly abroad.
+-Currently the President of the International Business Organization, Director of the Entrepreneurship Live programs at PACE, and also a media assistant at PACE.
 - <!-- EDIT: add anything from your resume a model should know -->
 
 ## How I want help

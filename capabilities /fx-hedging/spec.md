@@ -13,8 +13,8 @@
 | **Created by** | Landon Momohara |
 | **Updated by** | Landon Momohara |
 | **Date Created** | 2026-11-06 |
-| **Date Updated** | 2026-11-06 |
-| **Version** | 0.2 |
+| **Date Updated** | 2026-11-13 |
+| **Version** | 0.3 |
 | **LLM Used** | Claude Opus 5.5 (Anthropic): drafted v0.1 and reviewed it for gaps; fixes logged in `prompt-log.md` |
 | **Role** | Treasury Analyst |
 | **Audience** | CFO / Director of Treasury |
@@ -54,12 +54,13 @@ I typed `K_PUT` and `K_CALL` in as numbers equal to `S0_in` instead of linking t
 | Tab | Purpose |
 |---|---|
 | **Cover** | Title, scenario (35, `haul-trucks`), author, version, date, and a data-source table (each input, source, access date) |
-| **Legend** | Color key: yellow fill = input; blue text = hardcoded assumption; black = formula; green = cross-tab link; gray fill = output |
+| **Legend** | Color key (Stage 3 build contract), applied as cell fills on every tab: yellow = input; blue = assumption (hardcoded setting or reference figure); green = formula; gray = output |
 | **Inputs** | The ten named inputs from §2, with unit, source and an "indicative — replaced at Stage 4" flag beside each |
 | **Forward** | Forward hedge proceeds (§5.1) |
-| **MoneyMarket** | Money-market hedge in three visible steps, plus the parity block (§5.2–5.3) |
-| **Options** | Premium future values, put-floor and call payoffs, breakevens (§5.4) |
+| **MoneyMarket** | Money-market hedge in three visible steps, plus the parity block and the `PARITY_TOL` assumption (§5.2–5.3) |
+| **Options** | Premiums today and at settlement, put floor, breakevens, and put/call payoffs evaluated at `S_T_EVAL` (§5.4) |
 | **Sensitivity** | 11-row grid of USD proceeds and hedge profit by strategy, winner labels, and the comparison chart (§6) |
+| **Checks** | Live validation checks V1–V7 from §7: computed value, spec expected value, difference, PASS/FAIL/FLAG status |
 | **Notes** | Assumptions from §4, open issues, and a change log |
 
 ---
@@ -91,21 +92,23 @@ Everything below uses named ranges, never cell addresses. Each step gets its own
 - `F_IMPLIED` = `S0_in × (1 + R_USD × T_DAYS/360) / (1 + R_FC × T_DAYS/360)`
 - `MM_TIE` = `USD_MM − FC_AMT × F_IMPLIED`; must be 0 to rounding.
 - `PARITY_GAP` = `F0_in / F_IMPLIED − 1`; how far the quoted forward is above (+) or below (−) parity, in percent.
-- `PARITY_FLAG` = `"OK"` if `ABS(PARITY_GAP)` ≤ 0.5%, otherwise `"CHECK F0_in"`.
+- `PARITY_TOL` = 0.5% (blue assumption).
+- `PARITY_FLAG` = `"OK"` if `ABS(PARITY_GAP)` ≤ `PARITY_TOL`, otherwise `"CHECK F0_in"`.
 
 ### 5.4 Option hedges
 - `FV_PREM_PUT` = `PREM_PUT × FC_AMT × (1 + R_USD × T_DAYS/360)` (a cost, shown as a positive number and subtracted).
 - `FV_PREM_CALL` = `PREM_CALL × FC_AMT × (1 + R_USD × T_DAYS/360)`.
 - **Put floor (the hedge).** For settlement spot `S_T`: `USD_PUT(S_T)` = `FC_AMT × MAX(S_T, K_PUT) − FV_PREM_PUT`. If the euro ends below `K_PUT`, the put pays `K_PUT − S_T` per euro, so we never get less than `USD_FLOOR_PUT` = `FC_AMT × K_PUT − FV_PREM_PUT`. If it ends above `K_PUT`, we let the put expire and sell our euros at `S_T`.
 - **Call participation (informational).** `CALL_PAYOFF(S_T)` = `FC_AMT × MAX(S_T − K_CALL, 0) − FV_PREM_CALL`. A call on EUR only pays when the euro goes up. We're already receiving euros, so a call just adds more upside and does nothing if the euro falls. It isn't a hedge for us. I show it for completeness and **leave it out** of the winner labels.
+- **Payoff at a chosen `S_T`.** `S_T_EVAL` = `K_PUT` by default (the kink), with `USD_PUT_EVAL` and `CALL_PAYOFF_EVAL` computed from it, so the Options tab shows both payoffs as functions of `S_T`. Premiums today are also shown in USD: `PREM_PUT_USD0` = `PREM_PUT × FC_AMT`, `PREM_CALL_USD0` = `PREM_CALL × FC_AMT`.
 - **Breakevens.** `BE_PUT_FWD` = `F0_in + FV_PREM_PUT / FC_AMT`; `BE_PUT_MM` = `F_IMPLIED + FV_PREM_PUT / FC_AMT`. If the euro ends above these rates, the put does better than that locked hedge.
 
 ---
 
 ## 6. Sensitivity Plan
 
-- **Grid:** `S_T` = `S0_in × (1 + k%)` for k = −5 to +5 in 1% steps, giving 11 rows with the base case (k = 0) in the middle. The step size is a named input `STEP_FRAC` = 1% on the Sensitivity tab.
-- **Columns per row:** `S_T`; `USD_NO_HEDGE` = `FC_AMT × S_T`; `USD_FWD`; `USD_MM`; `USD_PUT(S_T)`; `CALL_PAYOFF(S_T)`; hedge profit `USD_k − USD_NO_HEDGE` for forward, MM and put; `WINNER` (highest of no hedge, forward, MM, put); `BEST_HEDGE` (highest of forward, MM, put).
+- **Grid:** `S_T` = `S0_in × (1 + k%)` for k = −5 to +5 in 1% steps, giving 11 rows with the base case (k = 0) in the middle. The step size is a named assumption `STEP_FRAC` = 1% and the half-width `N_STEPS` = 5, both blue cells on the Sensitivity tab. Each row's k is a formula, `ROW() − ROW(SENS_HDR) − 1 − N_STEPS`, so no row is hand-typed.
+- **Columns per row:** `S_T`; `USD_NO_HEDGE` = `FC_AMT × S_T`; `USD_FWD`; `USD_MM`; `USD_PUT(S_T)`; `CALL_PAYOFF(S_T)`; hedge profit `USD_k − USD_NO_HEDGE` for forward, MM and put; `WINNER` (highest of no hedge, forward, MM, put); `BEST_HEDGE` (highest of forward, MM, put). Profit and winner formulas reference named ranges (`USD_FWD`, `USD_MM`, `FC_AMT`, `STRAT_LABELS`, `HEDGE_LABELS`), not just cell addresses.
 - **Chart:** One line chart, `S_T` on the x-axis and USD proceeds on the y-axis, with four series: no hedge, forward, MM, put. Forward and MM are flat lines, no hedge is a straight line going up, and the put stays flat until `K_PUT` and then rises alongside no hedge.
 - **What the CFO should see:** how much we lose unhedged if the euro falls, what certainty costs (the gap between the flat lines and no hedge at today's spot), and how far the euro has to rise before the put's upside pays back its premium.
 
@@ -113,7 +116,7 @@ Everything below uses named ranges, never cell addresses. Each step gets its own
 
 ## 7. Validation Rules (Check Figures)
 
-These become the Stage 3 audit checklist. The workbook passes only if every check holds.
+These become the Stage 3 audit checklist and are computed live on the **Checks** tab. The workbook passes only if every check holds; a failing or flagged check is reported in the audit note, never forced to pass.
 
 | # | Check | Pass condition | Expected at placeholders |
 |---|---|---|---|
@@ -152,3 +155,4 @@ All dollar values are USD at settlement unless marked EUR.
 |---|---|---|---|
 | 0.1 | 2026-11-06 | Landon Momohara (AI-drafted) | First draft from the Stage 1 brief and Scenario 35 |
 | 0.2 | 2026-11-06 | Landon Momohara | Review fixes: parity rule split into V1 (formula tie) and V2 (data gap); premiums carried forward at `R_USD`; call defined as informational; inputs refreshed to 6 Nov 2026 |
+| 0.3 | 2026-11-13 | Landon Momohara (AI-assisted) | Stage 3 build fixes: legend aligned to the Stage 3 colour contract; added Checks tab; named `PARITY_TOL`, `N_STEPS`, `S_T_EVAL`; formula-driven grid index; named-range rule extended to profit and winner columns |
